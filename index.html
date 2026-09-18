@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Memecoin Scanner (static)</title>
+<style>
+body { font-family: sans-serif; max-width: 960px; margin: 2em auto; padding: 0 1em; }
+table { border-collapse: collapse; width: 100%; }
+th, td { border: 1px solid #ccc; padding: 6px; text-align: left; font-size: 14px; }
+button { padding: 8px 16px; margin: 4px; cursor: pointer; }
+input { padding: 8px; width: 420px; max-width: 90%; }
+.muted { color: #666; font-size: 13px; }
+</style>
+</head>
+<body>
+<h1>Memecoin Scanner <span class="muted">(static, client-side only)</span></h1>
+<p class="muted">No backend. Graduation events via PumpPortal WebSocket, market data via DexScreener, risk via RugCheck — all from your browser. Alerts via browser notifications.</p>
+
+<button id="startBtn" onclick="startMonitoring()">Start Monitoring</button>
+<button id="stopBtn" onclick="stopMonitoring()" disabled>Stop</button>
+<button onclick="scanNow()">Scan Now</button>
+<span class="muted">WS: <span id="wsStatus">idle</span> · tracked: <span id="trackedCount">0</span></span>
+
+<h2>Tracked coins</h2>
+<table>
+<thead><tr><th>Mint</th><th></th><th>Score</th><th>Liquidity</th><th>Momentum</th><th>Risk</th><th>Alert</th></tr></thead>
+<tbody id="results"><tr><td colspan="7">No coins tracked yet — press Start Monitoring.</td></tr></tbody>
+</table>
+
+<h2>Check one coin</h2>
+<input id="mintInput" placeholder="mint address">
+<button onclick="scanSingle()">Check</button>
+<button id="copySingleBtn" onclick="copySingle()" disabled>Copy mint</button>
+<p id="singleResult" class="muted"></p>
+
+<script type="module" src="./js/app.js"></script>
+</body>
+</html>

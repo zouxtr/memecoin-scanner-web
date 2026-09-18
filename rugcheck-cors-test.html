@@ -1,0 +1,28 @@
+<!doctype html>
+<html>
+<head><meta charset="utf-8"><title>RugCheck CORS test</title></head>
+<body>
+<h1>RugCheck CORS test</h1>
+<p>Open devtools console, or read the result below.</p>
+<pre id="out">running...</pre>
+<script>
+(async () => {
+  const out = document.getElementById('out');
+  const mint = 'So11111111111111111111111111111111111111112'; // wrapped SOL, always indexed
+  try {
+    const res = await fetch(`https://api.rugcheck.xyz/v1/tokens/${mint}/report`, {
+      headers: { 'Accept': 'application/json' },
+    });
+    const body = await res.json();
+    out.textContent = `SUCCESS: HTTP ${res.status}, risks count = ${(body.risks || []).length}. `
+      + `RugCheck is reachable from a browser (no CORS block).`;
+    console.log('RUGCHECK CORS TEST: SUCCESS', res.status, body);
+  } catch (e) {
+    out.textContent = `CORS FAILURE: ${e}. RugCheck blocks browser fetch() — `
+      + `needs a CORS proxy or backend in the main flow.`;
+    console.error('RUGCHECK CORS TEST: FAILED', e);
+  }
+})();
+</script>
+</body>
+</html>
