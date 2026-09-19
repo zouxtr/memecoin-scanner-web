@@ -76,9 +76,9 @@ export async function getTopHoldersViaRpc(mint) {
 // --- Individual checks (pure, operate on already-fetched data) ---
 
 function checkMintAuthority(report) {
-  // RugCheck top-level mintAuthority: null = revoked (safe).
+  // RugCheck top-level mintAuthority: null (or empty) = revoked (safe).
   // Also catch the risk-flag naming as a second source.
-  const active = report && report.mintAuthority != null;
+  const active = report && report.mintAuthority != null && report.mintAuthority !== '';
   const flagged = (report?.risks || []).some(
     (r) => r && typeof r === 'object' && /mint/i.test(String(r.name || '')) && /authority/i.test(String(r.name || '')),
   );
@@ -89,7 +89,7 @@ function checkMintAuthority(report) {
 }
 
 function checkFreezeAuthority(report) {
-  const active = report && report.freezeAuthority != null;
+  const active = report && report.freezeAuthority != null && report.freezeAuthority !== '';
   const flagged = (report?.risks || []).some(
     (r) => r && typeof r === 'object' && /freeze/i.test(String(r.name || '')),
   );
@@ -200,9 +200,12 @@ export function scoreRugRisk({ report, lpAddresses, creator }) {
   };
 }
 
-// Convenience: run the RPC holder fallback when the report lacks
-// topHolders, then score. Resolves to a scoreRugRisk result; RPC
-// failure just leaves concentration/dev as "unknown".
+// Manual deep-check helper (NOT used in the auto-poll loop): runs the RPC
+// holder fallback when the report lacks topHolders, then scores. Resolves
+// to a scoreRugRisk result; RPC failure just leaves concentration/dev as
+// "unknown". NOTE: the raw RPC accounts are stashed on `_rpcHolders` for
+// inspection only — percentage checks still require the report's own
+// topHolders[].pct, so this never invents percentages from raw amounts.
 export async function scoreRugRiskWithRpcFallback({ mint, report, lpAddresses, creator }) {
   let effectiveReport = report;
   if (!topHoldersList(report) && mint) {

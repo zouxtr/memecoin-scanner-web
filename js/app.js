@@ -5,7 +5,7 @@ import { CONFIG } from './config.js';
 import { getDexscreenerPairs, getRugcheckReport, extractMintAddress } from './data.js';
 import { scoreToken } from './scoring.js';
 import { listenForMigrations } from './pump.js';
-import { scoreRugRisk, scoreRugRiskWithRpcFallback } from './rugSignals.js';
+import { scoreRugRisk } from './rugSignals.js';
 import { loadSeen, markSeen } from './store.js';
 import { requestPermissionOnLoad, notifyHighPotential, isHighPotential } from './notify.js';
 
@@ -72,13 +72,13 @@ async function pollCoin(mint, state) {
   state.result = { ...result, volume_h1: volumeH1, momentum_pct: Math.round(momentum * 10) / 10 };
   state.drawdown = Math.round(drawdown * 10) / 10;
 
-  // Rug DD runs off the SAME already-fetched report/pair (no extra
-  // RugCheck call). RPC holder fallback only fires when the report has
-  // no topHolders, at most ~1 coin per spacing window; failure leaves
-  // those sub-checks "unknown" instead of blocking the poll.
+  // Rug DD runs synchronously off the SAME already-fetched report/pair
+  // (zero extra requests, zero added latency). The Solana RPC fallback is
+  // deliberately NOT in this hot path (see rugSignals.js) — unknown
+  // holder data stays "unknown" instead of stalling the poll loop.
   try {
-    state.rug = await scoreRugRiskWithRpcFallback({
-      mint, report: state.rugcheck || {}, lpAddresses: lpAddressesFromBest(best), creator: state.creator || null,
+    state.rug = scoreRugRisk({
+      report: state.rugcheck || {}, lpAddresses: lpAddressesFromBest(best), creator: state.creator || null,
     });
   } catch (e) {
     console.warn('Rug signals failed for', mint, e);
