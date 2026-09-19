@@ -17,6 +17,24 @@ export const CONFIG = {
   MAX_VOLUME_TO_LIQUIDITY_RATIO: 15,
   HIGH_POTENTIAL_THRESHOLD: 65,
   PUMPPORTAL_WS_URL: 'wss://pumpportal.fun/api/data',
+
+  // --- Rug-pull DD (see js/rugSignals.js) ---
+  // ruggedScore >= RUG_RISK_THRESHOLD hard-excludes a coin from "high
+  // potential" notifications (still listed in the UI, tagged red).
+  // 50 = any two major flags (e.g. mint+freeze authorities), or a
+  // concentration + unlocked-LP + dev-holding combo. Single minor flags
+  // (one holder at 9%, unknown LP status, ...) do not block alone.
+  RUG_RISK_THRESHOLD: 50,
+  // Flag if the largest non-LP holder owns more than this % of supply.
+  TOP_HOLDER_PCT_THRESHOLD: 8,
+  // Flag if the creator wallet itself holds more than this % post-migration.
+  DEV_HOLDING_PCT_THRESHOLD: 5,
+  // Public Solana RPC (no key) used ONLY as a best-effort fallback for the
+  // holder list when the RugCheck report has no topHolders yet.
+  SOLANA_RPC_URL: 'https://api.mainnet-beta.solana.com',
+  SOLANA_RPC_MIN_SPACING_MS: 1500,
+  SOLANA_RPC_MAX_RETRIES: 2,
+  SOLANA_RPC_RETRY_BASE_MS: 2000,
 };
 
 export const WEIGHTS = {

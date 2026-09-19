@@ -11,6 +11,12 @@ th, td { border: 1px solid #ccc; padding: 6px; text-align: left; font-size: 14px
 button { padding: 8px 16px; margin: 4px; cursor: pointer; }
 input { padding: 8px; width: 420px; max-width: 90%; }
 .muted { color: #666; font-size: 13px; }
+.rug { display: inline-block; padding: 2px 8px; border-radius: 10px; font-weight: bold; font-size: 13px; max-width: 320px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; vertical-align: middle; }
+.rug-green { background: #dff5d8; color: #1c6b1c; }
+.rug-yellow { background: #fff3c4; color: #8a6d00; }
+.rug-red { background: #ffd9d9; color: #a31212; }
+.rug-na { background: #eee; color: #888; }
+.rugcell { max-width: 340px; }
 </style>
 </head>
 <body>
@@ -24,8 +30,8 @@ input { padding: 8px; width: 420px; max-width: 90%; }
 
 <h2>Tracked coins</h2>
 <table>
-<thead><tr><th>Mint</th><th></th><th>Score</th><th>Liquidity</th><th>Momentum</th><th>Risk</th><th>Alert</th></tr></thead>
-<tbody id="results"><tr><td colspan="7">No coins tracked yet — press Start Monitoring.</td></tr></tbody>
+<thead><tr><th>Mint</th><th></th><th>Score</th><th>Rug risk</th><th>Liquidity</th><th>Momentum</th><th>Risk</th><th>Alert</th></tr></thead>
+<tbody id="results"><tr><td colspan="8">No coins tracked yet — press Start Monitoring.</td></tr></tbody>
 </table>
 
 <h2>Check one coin</h2>

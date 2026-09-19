@@ -5,6 +5,7 @@ import { CONFIG } from './config.js';
 import { getDexscreenerPairs, getRugcheckReport, extractMintAddress } from './data.js';
 import { scoreToken } from './scoring.js';
 import { listenForMigrations } from './pump.js';
+import { scoreRugRisk, scoreRugRiskWithRpcFallback } from './rugSignals.js';
 import { loadSeen, markSeen } from './store.js';
 import { requestPermissionOnLoad, notifyHighPotential, isHighPotential } from './notify.js';
 
@@ -20,7 +21,7 @@ function safeFloat(v) {
   return Number.isFinite(n) ? n : 0;
 }
 
-export async function scanCoin(mint) {
+export async function scanCoin(mint, creator = null) {
   const [pairs, rugcheck] = await Promise.all([
     getDexscreenerPairs(mint),
     getRugcheckReport(mint),
@@ -28,7 +29,27 @@ export async function scanCoin(mint) {
   const best = (pairs && pairs[0]) || {};
   // On-demand scan has no price history: momentum 0 (same as first poll).
   const result = scoreToken(mint, best, rugcheck, 0);
-  return { result, best, rugcheck };
+  const rug = scoreRugRisk({ report: rugcheck, lpAddresses: lpAddressesFromBest(best), creator });
+  return { result, best, rugcheck, rug };
+}
+
+function lpAddressesFromBest(best) {
+  if (!best || typeof best !== 'object') return [];
+  const addrs = [best.pairAddress, best.pair_address, best.address];
+  const lp = best.liquidity || {};
+  if (lp.address) addrs.push(lp.address);
+  return addrs.filter((a) => typeof a === 'string' && a.length >= 32);
+}
+
+// Creator/dev address may ride along on the PumpPortal migration payload
+// (field name not officially documented — try likely keys).
+export function extractCreator(event) {
+  if (!event || typeof event !== 'object') return null;
+  for (const key of ['creator', 'creatorAddress', 'deployer', 'deployerAddress', 'traderPublicKey', 'owner', 'authority']) {
+    const val = event[key];
+    if (typeof val === 'string' && val.length >= 32) return val;
+  }
+  return null;
 }
 
 async function pollCoin(mint, state) {
@@ -51,16 +72,36 @@ async function pollCoin(mint, state) {
   state.result = { ...result, volume_h1: volumeH1, momentum_pct: Math.round(momentum * 10) / 10 };
   state.drawdown = Math.round(drawdown * 10) / 10;
 
+  // Rug DD runs off the SAME already-fetched report/pair (no extra
+  // RugCheck call). RPC holder fallback only fires when the report has
+  // no topHolders, at most ~1 coin per spacing window; failure leaves
+  // those sub-checks "unknown" instead of blocking the poll.
+  try {
+    state.rug = await scoreRugRiskWithRpcFallback({
+      mint, report: state.rugcheck || {}, lpAddresses: lpAddressesFromBest(best), creator: state.creator || null,
+    });
+  } catch (e) {
+    console.warn('Rug signals failed for', mint, e);
+  }
+
   if (result.is_high_potential) state.consecutive += 1;
   else state.consecutive = 0;
 
+  // Hard-exclude high rug-risk coins from notifications even if momentum
+  // qualifies — they stay listed in the UI, tagged red (see render()).
+  const rugBlocked = state.rug && state.rug.isHighRugRisk;
   if (result.is_high_potential &&
       state.consecutive >= CONFIG.MIN_POLLS_BEFORE_ALERT &&
       drawdown < CONFIG.PEAK_DRAWDOWN_STOP_PCT &&
+      !rugBlocked &&
       !state.alerted) {
     state.alerted = true;
     markSeen(mint, state.result);
     notifyHighPotential(state.result);
+  }
+  if (rugBlocked && result.is_high_potential && !state.rugLogged) {
+    state.rugLogged = true;
+    console.info(`[rug-block] ${mint}: momentum score ${result.score} qualifies but ruggedScore ${state.rug.ruggedScore} >= ${CONFIG.RUG_RISK_THRESHOLD} — notification suppressed.`);
   }
   render();
 }
@@ -82,12 +123,12 @@ async function pollAll() {
   render();
 }
 
-function trackMint(mint) {
+function trackMint(mint, creator = null) {
   if (!mint || tracked.has(mint) || seen[mint]) return;
   tracked.set(mint, {
     firstPrice: null, peakPrice: null, polls: 0, consecutive: 0,
     rugcheck: null, deadline: Date.now() + CONFIG.MONITOR_WINDOW_MINUTES * 60 * 1000,
-    result: null, drawdown: 0, alerted: false,
+    result: null, rug: null, rugLogged: false, drawdown: 0, alerted: false, creator,
   });
   render();
 }
@@ -100,19 +141,31 @@ function riskText(result) {
   return noReport ? 'no report yet' : 'clean';
 }
 
+function rugBadge(rug) {
+  if (!rug) return '<span class="rug rug-na">…</span>';
+  const cls = rug.isHighRugRisk ? 'rug-red' : (rug.ruggedScore >= 30 ? 'rug-yellow' : 'rug-green');
+  const title = (rug.details || []).map((d) => `${d.triggered ? '✖' : '✔'} ${d.label}`).join('\n');
+  const flagList = (rug.flags || []).map((f) => f.label).join('; ');
+  return `<span class="rug ${cls}" title="${title.replace(/"/g, '&quot;')}">${rug.ruggedScore}${flagList ? ' — ' + flagList.replace(/</g, '&lt;') : ''}</span>`;
+}
+
 function render() {
   const tbody = $('results');
   const rows = [...tracked.entries()].map(([mint, s]) => {
     const r = s.result;
+    const alertCell = s.alerted ? 'alerted'
+      : (s.rug && s.rug.isHighRugRisk) ? `HIGH RUG RISK (${s.consecutive}/${CONFIG.MIN_POLLS_BEFORE_ALERT})`
+      : (s.consecutive + '/' + CONFIG.MIN_POLLS_BEFORE_ALERT);
     return `<tr><td title="${mint}">${mint.slice(0, 8)}…</td>` +
       `<td><button onclick="copyMint('${mint}')" title="Copy full mint address">Copy</button></td>` +
       `<td>${r ? r.score : '…'}</td>` +
+      `<td class="rugcell">${rugBadge(s.rug)}</td>` +
       `<td>${r ? '$' + Math.round(r.liquidity_usd).toLocaleString() : '…'}</td>` +
       `<td>${r ? (r.momentum_pct ?? 0) + '%' : '…'}</td>` +
       `<td>${riskText(r)}</td>` +
-      `<td>${s.alerted ? 'alerted' : (s.consecutive + '/' + CONFIG.MIN_POLLS_BEFORE_ALERT)}</td></tr>`;
+      `<td>${alertCell}</td></tr>`;
   });
-  tbody.innerHTML = rows.join('') || '<tr><td colspan="7">No coins tracked yet — press Start Monitoring.</td></tr>';
+  tbody.innerHTML = rows.join('') || '<tr><td colspan="8">No coins tracked yet — press Start Monitoring.</td></tr>';
   $('trackedCount').textContent = String(tracked.size);
 }
 
@@ -122,7 +175,7 @@ export function startMonitoring() {
   pumpHandle = listenForMigrations(
     (event) => {
       const mint = extractMintAddress(event);
-      if (mint) trackMint(mint);
+      if (mint) trackMint(mint, extractCreator(event));
     },
     (status) => { $('wsStatus').textContent = status; },
   );
@@ -179,14 +232,15 @@ window.scanSingle = async () => {
   if (!mint) return;
   $('singleResult').textContent = 'Scanning…';
   try {
-    const { result } = await scanCoin(mint);
+    const { result, rug } = await scanCoin(mint);
     markSeen(mint, result);
     lastSingleMint = mint;
     $('copySingleBtn').disabled = false;
-    if (isHighPotential(result)) notifyHighPotential(result);
+    if (isHighPotential(result) && !rug.isHighRugRisk) notifyHighPotential(result);
     $('singleResult').textContent =
-      `score ${result.score} | liquidity $${Math.round(result.liquidity_usd).toLocaleString()} | ` +
-      `risk: ${riskText(result)} | ${(result.reasons || []).join('; ')}`;
+      `score ${result.score} | rug ${rug.ruggedScore}${rug.isHighRugRisk ? ' HIGH RUG RISK' : ''} | liquidity $${Math.round(result.liquidity_usd).toLocaleString()} | ` +
+      `risk: ${riskText(result)} | ${(result.reasons || []).join('; ')}` +
+      (rug.flags.length ? ` | RUG FLAGS: ${rug.flags.map((f) => f.label).join('; ')}` : '');
   } catch (e) {
     $('singleResult').textContent = 'Scan failed: ' + e;
   }
