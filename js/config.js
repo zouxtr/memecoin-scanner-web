@@ -35,6 +35,16 @@ export const CONFIG = {
   SOLANA_RPC_MIN_SPACING_MS: 1500,
   SOLANA_RPC_MAX_RETRIES: 2,
   SOLANA_RPC_RETRY_BASE_MS: 2000,
+
+  // --- Penny-stock scanner (see js/stocks.js / js/stockScoring.js) ---
+  // Fully independent from the crypto constants above.
+  STOCK_POLL_INTERVAL_SECONDS: 60,
+  STOCK_MAX_PRICE: 5,
+  STOCK_MOVERS_LIMIT: 20,
+  STOCK_POTENTIAL_THRESHOLD: 65,
+  STOCK_GAIN_WEIGHT_PER_PCT: 5, // 10% gain -> +50 (capped at 50)
+  STOCK_RVOL_WEIGHT: 10,         // 2x relVol -> +10 (capped at 35)
+  STOCK_MIN_CHANGE_PCT: 3,       // below this, never alert
 };
 
 export const WEIGHTS = {
